@@ -1,0 +1,13 @@
+incidents:
+  - id: airflow-placeholder
+    incident_text: "Airflow DAG customer_orders failed last night"
+    expected_systems:
+      - airflow
+    expected_status: needs_more_context
+    notes: "Phase 1 should select Airflow but not claim a live root cause."
+  - id: trino-placeholder
+    incident_text: "Trino query 20260530_010203_00001_x failed from a pipeline task"
+    expected_systems:
+      - trino
+    expected_status: needs_more_context
+    notes: "Phase 1 should select Trino through keyword matching."
