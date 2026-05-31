@@ -17,9 +17,8 @@ class Settings(BaseSettings):
     kubernetes_mcp_url: str = "http://localhost:8093/mcp"
     emr_mcp_url: str = "http://localhost:8094/mcp"
 
-    anthropic_model: str = "claude-sonnet-4-6"
-    ollama_model: str = "qwen2.5:14b"
-    default_backend: str = "not-configured"
+    llm_profile: str = "local-qwen"
+    llm_config_path: Path = Path("config/model-profiles.yaml")
 
     prompt_path: Path = Path("prompts/trailwarden-system.md")
     trace_dir: Path = Path(".trailwarden/traces")

@@ -78,6 +78,32 @@ cp .env.example .env
 MCP servers are not installed or started by this project. Configure them separately as they
 become available, then point the `TRAILWARDEN_*_MCP_URL` settings at those processes.
 
+## Model Backends
+
+Trailwarden keeps model providers behind `src/trailwarden/model/`. Environment variables select
+a named profile, and each profile declares the backend class plus provider-specific model
+details in `config/model-profiles.yaml`.
+
+Local Ollama/Qwen development:
+
+```bash
+ollama pull qwen2.5:14b
+TRAILWARDEN_LLM_PROFILE=local-qwen \
+uv run trailwarden "Airflow DAG customer_orders failed last night"
+```
+
+Cloud providers use the same Trailwarden backend boundary; configure the provider credentials
+expected by LiteLLM and change the selected profile, for example:
+
+```bash
+TRAILWARDEN_LLM_PROFILE=anthropic-claude \
+uv run trailwarden "dbt model fct_orders failed in production"
+```
+
+Add new providers by adding profiles to `config/model-profiles.yaml`, such as an OpenAI model
+profile, without adding provider-specific environment variables. To disable live model calls,
+select the `disabled` profile, which uses `NotConfiguredBackend`.
+
 ## Usage
 
 ```bash
@@ -86,8 +112,9 @@ trailwarden --dag-id customer_orders --run-id manual__2026-05-30T23:00:00 "diagn
 trailwarden --verbose "dbt model fct_orders failed in production"
 ```
 
-Until live MCP clients and model adapters are wired, the CLI returns a clear skeleton response
-and writes a JSONL trace.
+Until live MCP clients are wired, Trailwarden can select intended diagnostics but cannot confirm
+a production root cause. Model backends help local iteration and response shaping; real diagnosis
+still depends on read-only evidence from configured MCP servers.
 
 ## Current Status
 
@@ -96,7 +123,7 @@ Phase 1:
 - Python 3.13+ `uv` project
 - Typer CLI entry point
 - Pydantic contracts for requests, evidence, root causes, fixes, responses, and traces
-- Model backend protocol with a not-configured placeholder
+- Swappable model backend protocol with not-configured and LiteLLM-backed adapters
 - MCP client boundary and server config construction
 - Pluggable diagnostic interfaces and placeholder plugins
 - JSONL trace recorder

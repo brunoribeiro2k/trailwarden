@@ -10,7 +10,25 @@ import pytest
 from trailwarden.agent.runtime import AgentRuntime
 from trailwarden.core.config import Settings
 from trailwarden.core.contracts import TrailwardenRequest, TrailwardenTrace
+from trailwarden.model.backend import Message, ModelTurn, NotConfiguredBackend, ToolDefinition
 from trailwarden.observability.tracing import TraceRecorder
+
+
+class FakeModelBackend:
+    """Small model backend used to verify runtime/backend integration."""
+
+    name = "litellm"
+    model = "ollama/qwen2.5:14b"
+
+    def complete(
+        self,
+        *,
+        system: str,
+        messages: list[Message],
+        tools: list[ToolDefinition],
+    ) -> ModelTurn:
+        del system, messages, tools
+        return ModelTurn(content="Local model summary.")
 
 
 def test_load_system_prompt_fallback(tmp_path: Path) -> None:
@@ -27,7 +45,7 @@ async def test_runtime_returns_skeleton_response(tmp_path: Path) -> None:
         prompt_path=tmp_path / "missing.md",
         trace_dir=tmp_path / "traces",
     )
-    runtime = AgentRuntime(settings=settings)
+    runtime = AgentRuntime(settings=settings, backend=NotConfiguredBackend())
 
     response = await runtime.diagnose("Airflow DAG customer_orders failed last night")
 
@@ -39,13 +57,30 @@ async def test_runtime_returns_skeleton_response(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_runtime_uses_injected_model_backend(tmp_path: Path) -> None:
+    """A swappable model backend can drive the same response contract."""
+    settings = Settings(
+        prompt_path=tmp_path / "missing.md",
+        trace_dir=tmp_path / "traces",
+    )
+    runtime = AgentRuntime(settings=settings, backend=FakeModelBackend())
+
+    response = await runtime.diagnose("Airflow DAG customer_orders failed last night")
+
+    assert response.status == "needs_more_context"
+    assert "Local model summary" in response.answer
+    assert response.systems_checked == ["airflow"]
+    assert response.trace_id
+
+
+@pytest.mark.asyncio
 async def test_runtime_returns_unsupported_system_when_no_plugin_matches(tmp_path: Path) -> None:
     """Incidents outside configured plugins get an explicit unsupported response."""
     settings = Settings(
         prompt_path=tmp_path / "missing.md",
         trace_dir=tmp_path / "traces",
     )
-    runtime = AgentRuntime(settings=settings)
+    runtime = AgentRuntime(settings=settings, backend=NotConfiguredBackend())
 
     response = await runtime.diagnose("The nightly spreadsheet export failed")
 

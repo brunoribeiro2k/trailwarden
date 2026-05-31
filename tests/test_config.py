@@ -15,6 +15,8 @@ def test_settings_defaults() -> None:
     assert settings.trino_mcp_url == "http://localhost:8082/mcp"
     assert settings.kubernetes_mcp_url == "http://localhost:8093/mcp"
     assert settings.emr_mcp_url == "http://localhost:8094/mcp"
+    assert settings.llm_profile == "local-qwen"
+    assert settings.llm_config_path.as_posix() == "config/model-profiles.yaml"
     assert settings.prompt_path.as_posix() == "prompts/trailwarden-system.md"
     assert settings.trace_dir.as_posix() == ".trailwarden/traces"
 

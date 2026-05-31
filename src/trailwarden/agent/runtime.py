@@ -22,7 +22,7 @@ from trailwarden.diagnostics import (
 )
 from trailwarden.diagnostics.base import DiagnosticContext, DiagnosticPlugin
 from trailwarden.mcp.client import McpClient
-from trailwarden.model.backend import Message, ModelBackend, NotConfiguredBackend
+from trailwarden.model.backend import Message, ModelBackend, build_model_backend
 from trailwarden.observability.tracing import TraceRecorder
 
 
@@ -39,7 +39,7 @@ class AgentRuntime:
         trace_recorder: TraceRecorder | None = None,
     ) -> None:
         self.settings = settings or Settings()
-        self.backend = backend or NotConfiguredBackend()
+        self.backend = backend or build_model_backend(self.settings)
         self.mcp_clients = dict(mcp_clients or {})
         self.diagnostic_plugins = list(diagnostic_plugins or self._default_plugins())
         self.trace_recorder = trace_recorder or TraceRecorder(self.settings.trace_dir)
