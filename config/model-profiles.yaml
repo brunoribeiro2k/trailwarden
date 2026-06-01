@@ -1,5 +1,6 @@
 # Named model profiles. Select one with TRAILWARDEN_LLM_PROFILE.
 profiles:
+  # Test/CI escape hatch only. Normal interactive use should select a live LLM profile.
   disabled:
     backend_class: NotConfiguredBackend
   local-qwen:

@@ -31,6 +31,30 @@ class FakeModelBackend:
         return ModelTurn(content="Local model summary.")
 
 
+class FakeTriageBackend:
+    """Model backend fake that selects diagnostics from conversational text."""
+
+    name = "litellm"
+    model = "ollama/qwen2.5:14b"
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def complete(
+        self,
+        *,
+        system: str,
+        messages: list[Message],
+        tools: list[ToolDefinition],
+    ) -> ModelTurn:
+        del system, tools
+        content = str(messages[-1].content)
+        self.calls.append(content)
+        if "choose which supported systems" in content:
+            return ModelTurn(content='{"systems":["dbt"]}')
+        return ModelTurn(content="The model understood this as a dbt incident.")
+
+
 def test_load_system_prompt_fallback(tmp_path: Path) -> None:
     """Runtime falls back gracefully when the prompt file is missing."""
     prompt = AgentRuntime._load_system_prompt(tmp_path / "missing.md")
@@ -71,6 +95,24 @@ async def test_runtime_uses_injected_model_backend(tmp_path: Path) -> None:
     assert "Local model summary" in response.answer
     assert response.systems_checked == ["airflow"]
     assert response.trace_id
+
+
+@pytest.mark.asyncio
+async def test_runtime_uses_model_triage_before_keyword_fallback(tmp_path: Path) -> None:
+    """Conversational incidents can be routed by the model without keyword parsing."""
+    settings = Settings(
+        prompt_path=tmp_path / "missing.md",
+        trace_dir=tmp_path / "traces",
+    )
+    backend = FakeTriageBackend()
+    runtime = AgentRuntime(settings=settings, backend=backend)
+
+    response = await runtime.diagnose("The customer orders freshness check is broken again")
+
+    assert response.status == "needs_more_context"
+    assert response.systems_checked == ["dbt"]
+    assert "dbt incident" in response.answer
+    assert any("choose which supported systems" in call for call in backend.calls)
 
 
 @pytest.mark.asyncio

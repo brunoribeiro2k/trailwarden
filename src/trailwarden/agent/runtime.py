@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 from trailwarden.core.config import Settings
 from trailwarden.core.contracts import (
@@ -76,9 +78,7 @@ class AgentRuntime:
             model=self.backend.model,
         )
 
-        matching_plugins = [
-            plugin for plugin in self.diagnostic_plugins if plugin.can_handle(context)
-        ]
+        matching_plugins = self._select_diagnostic_plugins(context)
         if not matching_plugins:
             trace.errors.append("No diagnostic plugin matched the incident context.")
             turn = self._model_summary(request)
@@ -165,6 +165,77 @@ class AgentRuntime:
             tools=[],
         )
         return turn.content
+
+    def _select_diagnostic_plugins(self, context: DiagnosticContext) -> list[DiagnosticPlugin]:
+        """Let the model select diagnostics, falling back to deterministic keyword hints."""
+        model_selected = self._model_selected_systems(context)
+        if model_selected:
+            selected = [
+                plugin
+                for plugin in self.diagnostic_plugins
+                if any(system in model_selected for system in plugin.supported_systems)
+            ]
+            if selected:
+                return selected
+
+        return [plugin for plugin in self.diagnostic_plugins if plugin.can_handle(context)]
+
+    def _model_selected_systems(self, context: DiagnosticContext) -> set[str]:
+        """Ask the model which supported systems are relevant to the incident."""
+        supported_systems = sorted(
+            {
+                system
+                for plugin in self.diagnostic_plugins
+                for system in plugin.supported_systems
+            }
+        )
+        prompt = (
+            "Read this data engineering incident and choose which supported systems "
+            "Trailwarden should inspect. Return only compact JSON with this schema: "
+            '{"systems":["airflow"]}. Use an empty list if none are relevant. '
+            f"Supported systems: {', '.join(supported_systems)}.\n\n"
+            f"Incident: {context.request.incident_text}\n"
+            f"run_id: {context.request.run_id or ''}\n"
+            f"dag_id: {context.request.dag_id or ''}\n"
+            f"task_id: {context.request.task_id or ''}\n"
+            f"environment: {context.request.environment or ''}"
+        )
+        turn = self.backend.complete(
+            system=self.system_prompt,
+            messages=[Message(role="user", content=prompt)],
+            tools=[],
+        )
+        payload = self._parse_json_object(turn.content)
+        systems = payload.get("systems", [])
+        if not isinstance(systems, list):
+            return set()
+        supported = set(supported_systems)
+        return {
+            system.lower()
+            for system in systems
+            if isinstance(system, str) and system.lower() in supported
+        }
+
+    @staticmethod
+    def _parse_json_object(content: str) -> dict[str, Any]:
+        """Parse a JSON object from a model response, including fenced JSON."""
+        stripped = content.strip()
+        if not stripped:
+            return {}
+        if stripped.startswith("```"):
+            lines = stripped.splitlines()
+            if lines and lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines and lines[-1].startswith("```"):
+                lines = lines[:-1]
+            stripped = "\n".join(lines).strip()
+        try:
+            payload = json.loads(stripped)
+        except json.JSONDecodeError:
+            return {}
+        if isinstance(payload, dict):
+            return payload
+        return {}
 
     @staticmethod
     def _context_fix() -> SuggestedFix:
